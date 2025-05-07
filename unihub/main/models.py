@@ -38,7 +38,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
 
 
-    full_name = models.CharField(max_length=255)
+    first_name = models.CharField(max_length=255, default='Text')
+    last_name = models.CharField(max_length=255, default='Text')
     email = models.EmailField(unique=True)
     #validators=[RegexValidator(regex=EDU_EMAIL_REGEX, message="Must use a .edu email")])
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')

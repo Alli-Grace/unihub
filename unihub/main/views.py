@@ -1,21 +1,21 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import User
-from .serializers import UserSerializer, PostSerializer, EventSerializer, CommunitySerializer, NotificationSerializer, EventAttendeeSerializer, VirtualSessionSerializer, CommunityMemberSerializer
+from .serializers import UserSerializer, LimitedUserSerializer, PostSerializer, ChangePasswordSerializer, EventSerializer, CommunitySerializer, NotificationSerializer, EventAttendeeSerializer, VirtualSessionSerializer, AdminSignupSerializer, CommunityMemberSerializer
 from rest_framework import status, generics, permissions
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from .models import User, Community, CommunityMember, Post, Event, EventAttendee, VirtualSession, Notification
 from .serializers import UserSerializer
+from rest_framework.views import APIView
 
-class LimitedUserSerializer(UserSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'full_name']
+
+
 
 class SignupView(generics.CreateAPIView):
     serializer_class = UserSerializer
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -39,10 +39,7 @@ class LoginView(generics.GenericAPIView):
         user = authenticate(email=email, password=password)
         
         if not user:
-            return Response(
-                {'error': 'Invalid credentials'}, 
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         
         refresh = RefreshToken.for_user(user)
         user_data = LimitedUserSerializer(user).data
@@ -69,35 +66,6 @@ class LogoutView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-# class PasswordResetView(generics.GenericAPIView):
-#     serializer_class = PasswordResetSerializer
-
-#     def post(self, request):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-        
-#         email = serializer.validated_data['email']
-#         try:
-#             user = User.objects.get(email=email)
-#             # Generate reset token and send email
-#             # Implementation depends on your email service
-#             return Response({'message': 'Password reset link sent'})
-#         except User.DoesNotExist:
-#             return Response(
-#                 {'error': 'User with this email does not exist'},
-#                 status=status.HTTP_404_NOT_FOUND
-#             )
-
-# class SetNewPasswordView(generics.GenericAPIView):
-#     serializer_class = SetNewPasswordSerializer
-
-#     def post(self, request):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-        
-#         # Validate reset token and update password
-#         # Implementation depends on your token validation logic
-#         return Response({'message': 'Password updated successfully'})
 
 class CurrentUserView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -126,25 +94,20 @@ class PublicProfileView(generics.RetrieveAPIView):
         context['public_view'] = True
         return context
 
-# class ChangePasswordView(generics.GenericAPIView):
-#     permission_classes = [permissions.IsAuthenticated]
-#     serializer_class = ChangePasswordSerializer
+# PROFILE
+class ChangePasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ChangePasswordSerializer
 
-#     def put(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-        
-#         user = request.user
-#         if not user.check_password(serializer.validated_data['current_password']):
-#             return Response(
-#                 {'current_password': 'Wrong password'},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-        
-#         user.set_password(serializer.validated_data['new_password'])
-#         user.save()
-#         return Response({'message': 'Password updated successfully'})
-    
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"detail": "Password updated successfully."}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 # COMMUNITY
 class CommunityListView(generics.ListCreateAPIView):
     queryset = Community.objects.all()
@@ -278,7 +241,6 @@ class EventAttendeesView(generics.ListAPIView):
         return EventAttendee.objects.filter(event_id=event_id)
 
 # POSTS
-
 class PostListView(generics.ListCreateAPIView):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
@@ -343,23 +305,75 @@ class MarkAllNotificationsReadView(generics.GenericAPIView):
         ).update(is_read=True)
         return Response({'message': 'All notifications marked as read'})
 
+# VIRTUALSESSIONS
+class VirtualSessionListView(generics.ListCreateAPIView):
+    queryset = VirtualSession.objects.all()
+    serializer_class = VirtualSessionSerializer
+    # filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['community', 'platform', 'organizer']
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        now = timezone.now()
+        
+        # Filter by upcoming/past sessions if requested
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter == 'upcoming':
+            queryset = queryset.filter(start_datetime__gte=now)
+        elif status_filter == 'past':
+            queryset = queryset.filter(start_datetime__lt=now)
+            
+        return queryset.order_by('start_datetime')
+
+    def perform_create(self, serializer):
+        serializer.save(organizer=self.request.user)
+
+class VirtualSessionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = VirtualSession.objects.all()
+    serializer_class = VirtualSessionSerializer
+    # permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsSessionOrganizer]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+class CommunityVirtualSessionListView(generics.ListAPIView):
+    serializer_class = VirtualSessionSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        community_id = self.kwargs['communityId']
+        return VirtualSession.objects.filter(
+            community_id=community_id
+        ).order_by('start_datetime')
+
+
 
 # ADMIN
-from rest_framework import generics, permissions
-from rest_framework.response import Response
-# from django_filters.rest_framework import DjangoFilterBackend
-from .models import User, Community, Event, Post, Notification
-from .serializers import (
-    UserSerializer, 
-    CommunitySerializer,
-    EventSerializer,
-    PostSerializer,
-    NotificationSerializer
-)
-
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'admin'
+
+
+class AdminSignupView(generics.CreateAPIView):
+    serializer_class = AdminSignupSerializer
+    permission_classes = [permissions.IsAdminUser]  # Only existing admins can create new admins
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'full_name': user.full_name,
+                'role': user.role
+            }
+        }, status=status.HTTP_201_CREATED)
 
 # User Admin Views
 class AdminUserListView(generics.ListCreateAPIView):
@@ -425,4 +439,15 @@ class AdminNotificationListView(generics.ListAPIView):
 class AdminNotificationDetailView(generics.RetrieveDestroyAPIView):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
+    permission_classes = [IsAdmin]
+
+# Admin Views
+class AdminVirtualSessionListView(generics.ListCreateAPIView):
+    queryset = VirtualSession.objects.all()
+    serializer_class = VirtualSessionSerializer
+    permission_classes = [IsAdmin]
+    
+class AdminVirtualSessionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = VirtualSession.objects.all()
+    serializer_class = VirtualSessionSerializer
     permission_classes = [IsAdmin]

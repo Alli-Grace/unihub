@@ -1,10 +1,41 @@
 from rest_framework import serializers
-from .models import (
-    User, Community, CommunityMember, Event, EventAttendee,
-    Post, VirtualSession, Notification
-)
+from .models import (User, Community, CommunityMember, Event, EventAttendee, Post, VirtualSession, Notification)
+from rest_framework.validators import ValidationError, UniqueValidator
 from django.contrib.auth.password_validation import validate_password
 
+
+class AdminSignupSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[validate_password]
+    )
+    confirm_password = serializers.CharField(
+        write_only=True,
+        required=True,
+    )
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'first_name', 'last_name', 'password', 'confirm_password']
+        extra_kwargs = {
+            'email': {'required': True},
+            'first_name': {'required': True},
+            'last_name': {'required': True}
+       }
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({"password": "Password fields didn't match."})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        validated_data['role'] = 'admin'  # Force admin role
+        validated_data['is_staff'] = True
+        
+        user = User.objects.create_user(**validated_data)
+        return user
 
 # ----------------------------
 # User Serializer
@@ -16,10 +47,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'full_name', 'password', 'confirm_password', 'role',
-            'avatar_url', 'major', 'year', 'department', 'position', 'bio',
-            'interests', 'social_links', 'privacy_settings', 'notification_preferences',
-            'created_at', 'updated_at'
+            'id', 'email', 'first_name', 'last_name', 'password', 'confirm_password', 'role'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -32,6 +60,46 @@ class UserSerializer(serializers.ModelSerializer):
         validated_data.pop('confirm_password')
         user = User.objects.create_user(**validated_data)
         return user
+
+class LimitedUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'first_name', 'last_name']
+
+
+# ----------------------------
+# User Profile Serializer
+# ----------------------------
+class UserProfileSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    confirm_password = serializers.CharField(write_only=True, required=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'password', 'confirm_password', 'role',
+            'avatar_url', 'major', 'year', 'department', 'position', 'bio',
+            'interests', 'social_links', 'privacy_settings', 'notification_preferences',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'email']  # Email usually shouldn't be editable
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
+    # confirm_password = serializers.CharField(write_only=True, required=True)
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise ValidationError("Old password is incorrect")
+        return value
 
 
 # ----------------------------
