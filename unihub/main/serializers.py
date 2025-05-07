@@ -47,7 +47,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'password', 'confirm_password', 'role'
+            'id', 'email', 'first_name', 'last_name', 'password', 'confirm_password'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -71,9 +71,7 @@ class LimitedUserSerializer(serializers.ModelSerializer):
 # User Profile Serializer
 # ----------------------------
 class UserProfileSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    confirm_password = serializers.CharField(write_only=True, required=True)
-
+    
     class Meta:
         model = User
         fields = [
@@ -82,7 +80,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'interests', 'social_links', 'privacy_settings', 'notification_preferences',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'email']  # Email usually shouldn't be editable
+        read_only_fields = ['id', 'email']  # Email shouldn't be editable
 
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():

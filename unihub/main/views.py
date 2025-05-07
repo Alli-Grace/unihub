@@ -1,7 +1,7 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import User
-from .serializers import UserSerializer, LimitedUserSerializer, PostSerializer, ChangePasswordSerializer, EventSerializer, CommunitySerializer, NotificationSerializer, EventAttendeeSerializer, VirtualSessionSerializer, AdminSignupSerializer, CommunityMemberSerializer
+from .serializers import UserSerializer, LimitedUserSerializer, UserProfileSerializer, PostSerializer, ChangePasswordSerializer, EventSerializer, CommunitySerializer, NotificationSerializer, EventAttendeeSerializer, VirtualSessionSerializer, AdminSignupSerializer, CommunityMemberSerializer
 from rest_framework import status, generics, permissions
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -32,6 +32,7 @@ class SignupView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 class LoginView(generics.GenericAPIView):
+    permission_classes=[permissions.AllowAny]
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         password = request.data.get('password')
@@ -69,23 +70,22 @@ class LogoutView(generics.GenericAPIView):
 
 class CurrentUserView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = UserSerializer
+    serializer_class = UserProfileSerializer
 
     def get_object(self):
         return self.request.user
-
 
 
 # PROFILE
 class UserProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = UserSerializer
+    serializer_class = UserProfileSerializer
 
     def get_object(self):
         return self.request.user
 
 class PublicProfileView(generics.RetrieveAPIView):
-    serializer_class = UserSerializer
+    serializer_class = UserProfileSerializer
     queryset = User.objects.all()
     lookup_field = 'id'
 
