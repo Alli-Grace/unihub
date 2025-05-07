@@ -1,11 +1,10 @@
 from django.urls import path
 from .views import (
     # Auth views
-    SignupView, LoginView, LogoutView,
-    PasswordResetView, SetNewPasswordView, CurrentUserView,
+    SignupView, LoginView, LogoutView, CurrentUserView,
     
     # Profile views
-    UserProfileView, PublicProfileView, ChangePasswordView,
+    UserProfileView, PublicProfileView,
     
     # Community views
     CommunityListView, UserCommunitiesView, CommunityDetailView,
