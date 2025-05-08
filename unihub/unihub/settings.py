@@ -31,6 +31,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5500',
+    # 'https://learnhub-self.vercel.app',
+]
 
 # Application definition
 
